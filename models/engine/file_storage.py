@@ -17,25 +17,24 @@ classes = {"Amenity": Amenity, "BaseModel": BaseModel, "City": City,
 
 
 class FileStorage:
-    """serializes instances to a JSON file & deserializes back to instances"""
+    """handles long term storage of all class instances"""
 
-    # string - path to the JSON file
+
     __file_path = "file.json"
-    # dictionary - empty but will store all objects by <class name>.id
     __objects = {}
 
     def all(self, cls=None):
         """returns the dictionary __objects"""
         if cls is not None:
-            new_dict = {}
+            objects_dict = {}
             for key, value in self.__objects.items():
                 if cls == value.__class__ or cls == value.__class__.__name__:
-                    new_dict[key] = value
-            return new_dict
+                    objects_dict[key] = value
+            return objects_dict
         return self.__objects
 
     def new(self, obj):
-        """sets in __objects the obj with key <obj class name>.id"""
+        """sets or updates in __objects the obj with key <obj class name>.id"""
         if obj is not None:
             key = obj.__class__.__name__ + "." + obj.id
             self.__objects[key] = obj
@@ -49,7 +48,7 @@ class FileStorage:
             json.dump(json_objects, f)
 
     def reload(self):
-        """deserializes the JSON file to __objects"""
+        """if file exists, deserializes the JSON file to __objects, else nothing"""
         try:
             with open(self.__file_path, 'r') as f:
                 jo = json.load(f)
@@ -59,7 +58,7 @@ class FileStorage:
             pass
 
     def delete(self, obj=None):
-        """delete obj from __objects if it’s inside"""
+        """delete obj from __objects if its inside"""
         if obj is not None:
             key = obj.__class__.__name__ + '.' + obj.id
             if key in self.__objects:
@@ -68,3 +67,36 @@ class FileStorage:
     def close(self):
         """call reload() method for deserializing the JSON file to objects"""
         self.reload()
+
+    def get(self, cls, id):
+        '''
+        gets specific object
+        :param cls: class
+        :param id: id of instance
+        :return: object or None
+        '''
+
+        if type(cls) == str:
+            key = cls + "." + id
+        else:
+            key = cls.__name__ + "." + id
+
+        instances = self.all(cls)
+
+        instance = instances.get(key)
+
+        return instance
+
+    def count(self, cls=None):
+        '''
+        count of instances
+        :param cls: class
+        :return: number of instances
+        '''
+
+        if cls:
+            instances = self.all(cls)
+            return len(instances)
+        else:
+            instances = self.all()
+            return len(instances)
