@@ -1,101 +1,78 @@
 #!/usr/bin/python3
-"""route for handling Review objects and operations"""
-
+"""
+View for the link between Place and Amenity Review
+objects that handles default API actions
+"""
 from api.v1.views import app_views
 from flask import jsonify, abort, make_response, request
 from models import storage
-from models.review import Review
+from models.place import Place
+from models.amenity import Amenity
+from os import getenv
 
 
-@app_views.route("/places/<place_id>/reviews")
-def all_reviews(place_id):
-    '''retrieves all Review objects by place
-    :return: json of all reviews'''
-
-    # Check if place exists
-    if not storage.get("Place", place_id):
+@app_views.route('/places/<place_id>/amenities', methods=['GET'],
+                 strict_slashes=False)
+def places_amenities(place_id):
+    """ Retrieves the list of all Amenities objects in a Place"""
+    place = storage.get("Place", place_id)
+    if not place:
         abort(404)
 
-    review_list = []
-    for review in storage.all("Review").values():
-        if review.place_id == place_id:
-            review_list.append(review.to_dict())
-    return jsonify(review_list)
+    if getenv('HBNB_TYPE_STORAGE') == 'db':
+        l = [amenity.to_dict() for amenity in place.amenities]
+    else:
+        l = [storage.get("Amenity", id).to_dict() for id in place.amenity_ids]
+    return jsonify(l)
 
 
-@app_views.route("/reviews/<review_id>")
-def review(review_id):
-    '''Returns an instance of the specified object'''
-    review = storage.get("Review", review_id)
-    if not review:
+@app_views.route('/places/<place_id>/amenities/<amenity_id>',
+                 methods=['DELETE'], strict_slashes=False)
+def del_places_amenities(place_id, amenity_id):
+    """ Deletes an Amenity object """
+    place = storage.get("Place", place_id)
+    if not place:
         abort(404)
-    return jsonify(review.to_dict())
 
-
-@app_views.route("/reviews/<review_id>", methods=['DELETE'])
-def delete_review(review_id):
-    '''deletes Review by id
-    :param : Review object id
-    :return: empty dict with 200 or 404 if not found'''
-
-    review = storage.get("Review", review_id)
-    if not review:
+    amenity = storage.get("Amenity", amenity_id)
+    if not amenity:
         abort(404)
-    storage.delete(review)
+
+    if getenv('HBNB_TYPE_STORAGE') == 'db':
+        if amenity not in place.amenities:
+            abort(404)
+    else:
+        if amenity_id not in place.amenity_ids:
+            abort(404)
+        index = place.amenity_ids.index(amenity_id)
+        place.amenity_ids.pop(index)
+
+    amenity.delete()
     storage.save()
     return make_response(jsonify({}), 200)
 
 
-@app_views.route("/places/<place_id>/reviews", methods=["POST"])
-def create_review(place_id):
-    '''create review route
-    :return: newly created Review obj'''
-
-    if not storage.get("Place", place_id):
+@app_views.route('/places/<place_id>/amenities/<amenity_id>',
+                 methods=['POST'],
+                 strict_slashes=False)
+def link_amenity_place(place_id, amenity_id):
+    """ Links an Amenity and a Place """
+    place = storage.get("Place", place_id)
+    if not place:
         abort(404)
 
-    if not request.get_json():
-        abort(400, description="Not a JSON")
-
-    user_id = request.get_json().get('user_id')
-    if not user_id:
-        abort(400, description="Missing user_id")
-
-    if not storage.get("User", user_id):
+    amenity = storage.get("Amenity", amenity_id)
+    if not amenity:
         abort(404)
 
-    if not request.get_json().get('text'):
-        abort(400, description="Missing text")
-
-    review = Review()
-    review.text = request.get_json()['text']
-    review.place_id = place_id
-    review.user_id = user_id
-    review.save()
-
-    return make_response(jsonify(review.to_dict()), 201)
-
-
-@app_views.route("/reviews/<review_id>", methods=['PUT'])
-def update_review(review_id):
-    '''updates specific Review object by ID
-    :param review_id: Review object ID
-    :return: Review object and 200 on success, or 400 or 404 on failure'''
-
-    review = storage.get("Review", review_id)
-    if not review:
-        abort(404)
-
-    if not request.get_json():
-        abort(400, description="Not a JSON")
-
-    for key, val in request.get_json().items():
-        if key == "id" or key == "created_at" or key == "updated_at" \
-           or key == "user_id" or key == "place_id":
-            continue
-        else:
-            setattr(review, key, val)
+    if getenv('HBNB_TYPE_STORAGE') == 'db':
+        if amenity in place.amenities:
+            return make_response(jsonify(amenity.to_dict()), 200)
+        place.amenities.append(amenity)
+    else:
+        if amenity_id in place.amenity_ids:
+            return make_response(jsonify(amenity.to_dict()), 200)
+        place.amenity_ids.append(amenity_id)
 
     storage.save()
-
-    return make_response(jsonify(review.to_dict()), 200)
+    return make_response(jsonify(amenity.to_dict()), 201)
